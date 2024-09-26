@@ -1,0 +1,102 @@
+import tkinter as tk
+from tkinter import filedialog, messagebox
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+import os
+import math
+
+class DiffieHellmanGUI:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Diffie-Hellman para tres personas")
+        self.keys = {'A': None, 'B': None, 'C': None}
+        self.shared_key = None
+
+        self.generate_button_A = tk.Button(master, text="Generar llave A", command=lambda: self.generate_keys('A'))
+        self.generate_button_A.grid(row=0, column=0, padx=10, pady=5)
+
+        self.generate_button_B = tk.Button(master, text="Generar llave B", command=lambda: self.generate_keys('B'))
+        self.generate_button_B.grid(row=0, column=1, padx=10, pady=5)
+
+        self.generate_button_C = tk.Button(master, text="Generar llave C", command=lambda: self.generate_keys('C'))
+        self.generate_button_C.grid(row=0, column=2, padx=10, pady=5)
+
+        self.calculate_button = tk.Button(master, text="Calcular clave compartida", command=self.calculate_shared_key)
+        self.calculate_button.grid(row=1, column=0, columnspan=3, padx=10, pady=10)
+
+        self.load_button = tk.Button(master, text="Cargar archivo PEM de otro usuario", command=self.load_keys)
+        self.load_button.grid(row=2, column=0, columnspan=3, padx=10, pady=5)
+
+        self.key_size_label = tk.Label(master, text="")
+        self.key_size_label.grid(row=3, column=0, columnspan=3, padx=10, pady=5)
+
+    def generate_keys(self, user):
+        private_key = ec.generate_private_key(ec.SECP521R1(), default_backend())
+        public_key = private_key.public_key()
+        self.keys[user] = (private_key, public_key)
+        pem = public_key.public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        print(pem.decode())
+
+        # Create a directory for the user if it doesn't exist
+        os.makedirs(user, exist_ok=True)
+
+        # Save the public key in the user's directory
+        with open(f'{user}/{user}_public_key.pem', 'wb') as pem_out:
+            pem_out.write(pem)
+        messagebox.showinfo("Llave Generada", f"Se ha generado la llave para el usuario {user}.")
+        print(f"Generated keys for user {user}:")
+        print(f"Private key: {self.keys[user][0]}")
+        print(f"Public key: {self.keys[user][1]}")
+
+    def load_keys(self):
+        filename = filedialog.askopenfilename(title="Seleccionar archivo PEM de llaves", filetypes=[("PEM files", "*.pem")])
+        if not filename:
+            return
+        try:
+            with open(filename, 'rb') as file:
+                pem_data = file.read()
+                public_key = serialization.load_pem_public_key(pem_data, default_backend())
+                user = os.path.basename(filename).split('_')[0].upper()  # Assuming filename is in format 'USER_public_key.pem'
+                self.keys[user] = (None, public_key)
+                self.calculate_key_size(public_key)
+            print(f"Loaded public key for user {user}: {self.keys[user][1]}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al cargar las llaves: {e}")
+
+    def calculate_key_size(self, public_key):
+        key_size_bits = public_key.curve.key_size
+        self.key_size_label.config(text=f"Tamaño de la clave cargada: {key_size_bits} bits")
+
+    def calculate_shared_key(self):
+        if any(self.keys[user] is None or self.keys[user][0] is None or self.keys[user][1] is None for user in self.keys):
+            messagebox.showerror("Error", "Faltan llaves para calcular la clave compartida.")
+            return
+        if None in self.keys.values():
+            messagebox.showerror("Error", "Faltan llaves para calcular la clave compartida.")
+            return
+        try:
+            shared_key_AB = self.keys['A'][0].exchange(ec.ECDH(), self.keys['B'][1])
+            shared_key_BC = self.keys['B'][0].exchange(ec.ECDH(), self.keys['C'][1])
+            shared_key_CA = self.keys['C'][0].exchange(ec.ECDH(), self.keys['A'][1])
+
+            # Save the shared keys in each user's directory
+            for user, shared_key in [('AB', shared_key_AB), ('BC', shared_key_BC), ('CA', shared_key_CA)]:
+                with open(f'{user}_shared_key.pem', 'wb') as shared_key_out:
+                    shared_key_out.write(shared_key)
+
+            messagebox.showinfo("Claves Compartidas Calculadas", "Las claves compartidas han sido calculadas.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al calcular las claves compartidas: {e}")
+        print(f"Calculated shared keys: AB: {shared_key_AB}, BC: {shared_key_BC}, CA: {shared_key_CA}")
+
+def main():
+    root = tk.Tk()
+    app = DiffieHellmanGUI(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()

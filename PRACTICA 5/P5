@@ -1,0 +1,75 @@
+import tkinter as tk
+from tkinter import messagebox
+from py_ecc import optimized_bn128 as bn128
+import random
+
+class DiffieHellmanGUI:
+    def __init__(self, master):
+        self.master = master
+        self.master.title("Diffie-Hellman para tres personas")
+
+        self.current_user = None
+
+        self.generate_button_alicia = tk.Button(master, text="Alicia", command=lambda: self.select_user("Alicia"))
+        self.generate_button_alicia.grid(row=0, column=0, padx=10, pady=10)
+        self.generate_button_betito = tk.Button(master, text="Betito", command=lambda: self.select_user("Betito"))
+        self.generate_button_betito.grid(row=0, column=1, padx=10, pady=10)
+        self.generate_button_carlitos = tk.Button(master, text="Carlitos", command=lambda: self.select_user("Carlitos"))
+        self.generate_button_carlitos.grid(row=0, column=2, padx=10, pady=10)
+
+        self.curve_params = None
+        self.generator_point = None
+        self.random_number = None
+        self.point = None
+
+        self.generate_curve_params()
+
+    def select_user(self, user):
+        self.current_user = user
+        self.generate_curve_params()
+
+    def generate_curve_params(self):
+        if self.current_user:
+            curve = bn128.curve_order
+            self.curve_params = "optimized_bn128"
+            self.generator_point = bn128.G1
+            self.random_number = curve
+            self.point = bn128.multiply(bn128.G1, random.randint(1, curve))
+            self.show_params()
+
+    def show_params(self):
+        messagebox.showinfo("Parámetros de la curva", 
+                            f"Parámetros de la curva:\n\n"
+                            f"Nombre de la curva: {self.curve_params}\n\n"
+                            f"Punto generador:\n{self.generator_point}\n\n"
+                            f"Número aleatorio: {self.random_number}\n\n"
+                            f"Primer punto generado:\n{self.point}")
+
+def main():
+    root = tk.Tk()
+    app = DiffieHellmanGUI(root)
+    root.mainloop()
+
+    if app.curve_params:
+        curve = bn128.curve_order
+
+        private_key_alicia = random.randint(1, curve)
+        public_key_alicia = bn128.multiply(bn128.G1, private_key_alicia)
+
+        private_key_betito = random.randint(1, curve)
+        public_key_betito = bn128.multiply(bn128.G1, private_key_betito)
+
+        private_key_carlitos = random.randint(1, curve)
+        public_key_carlitos = bn128.multiply(bn128.G1, private_key_carlitos)
+
+        shared_key_alicia = bn128.multiply(public_key_betito, private_key_alicia)
+        shared_key_betito = bn128.multiply(public_key_carlitos, private_key_betito)
+        shared_key_carlitos = bn128.multiply(public_key_alicia, private_key_carlitos)
+
+        shared_key_sum = bn128.add(bn128.add(shared_key_alicia, shared_key_betito), shared_key_carlitos)
+
+        messagebox.showinfo("Resultado del intercambio de claves",
+                            f"Clave compartida final: {shared_key_sum}")
+
+if __name__ == "__main__":
+    main()
